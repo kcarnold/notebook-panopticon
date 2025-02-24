@@ -1,8 +1,13 @@
+from difflib import SequenceMatcher
+import io
 import streamlit as st
+import streamlit.components.v1 as components
 import nbformat
 from pathlib import Path
 import random
-from difflib import SequenceMatcher
+from nbdime import diff_notebooks
+import nbdime.prettyprint as nbdiff_print
+#from nbdime.webapp.nbdimeserver import diff_to_html
 
 DATA_DIR = Path("data")
 SUBMISSIONS_DIR = DATA_DIR / "submissions"
@@ -37,7 +42,7 @@ def compute_diff_score(submission, starter):
     # Convert similarity to a distance score (0 = identical, higher = more different)
     return 1 - similarity
 
-@st.cache_data
+#@st.cache_data
 def get_cached_diff(student, assignment):
     """Get or compute diff for student's assignment."""
     submission_path = SUBMISSIONS_DIR / assignment / f"{student}.ipynb"
@@ -56,42 +61,46 @@ def get_cached_diff(student, assignment):
     
     return compute_notebook_diff(submission, starter)
 
-@st.cache_data
+#@st.cache_data
 def compute_notebook_diff(submission_notebook, starter_notebook):
-    """Compute cell-by-cell differences between notebooks."""
-    diff_result = []
+    """Compute notebook diff and return HTML representation."""
+    # Get the raw diff
+    diff = diff_notebooks(starter_notebook, submission_notebook)
+
+    # The webapp diff code uses JS that we can't run easily here.
+    # So we'll use the command-line diff generator and convert to HTML.
+    from nbdime.prettyprint import pretty_print_notebook_diff, PrettyPrintConfig
+    output = io.StringIO()
+    pretty_config = PrettyPrintConfig(
+        out=output,
+    )
+    pretty_config.metadata = False
+    pretty_config.outputs = False
+    pretty_config.details = False
+    assert pretty_config.should_ignore_path('/cells/3/metadata/execution')
+    assert pretty_config.should_ignore_path('/cells/3/execution_count')
+    pretty_print_notebook_diff("starter", "submission", starter_notebook, diff, pretty_config)
+    terminal_output = output.getvalue()
+    output.close()
+
+    # Convert the terminal output to HTML
+    import ansi2html
+    converter = ansi2html.Ansi2HTMLConverter(dark_bg=False)
+    html = converter.convert(terminal_output)
+
     
-    for i, sub_cell in enumerate(submission_notebook.cells):
-        cell_diff = {
-            "cell_type": sub_cell.cell_type,
-            "index": i,
-            "status": "added",
-            "source": sub_cell.get('source', ''),
-            "outputs": sub_cell.get('outputs', []) if sub_cell.cell_type == 'code' else None
-        }
-        
-        # Try to find matching cell in starter
-        best_match = None
-        best_score = float('inf')
-        for j, start_cell in enumerate(starter_notebook.cells):
-            if start_cell.cell_type == sub_cell.cell_type:
-                score = 1 - SequenceMatcher(None, 
-                    sub_cell.get('source', ''),
-                    start_cell.get('source', '')
-                ).ratio()
-                if score < best_score:
-                    best_score = score
-                    best_match = (j, start_cell)
-        
-        if best_match and best_score < 0.3:  # threshold for considering cells similar
-            j, start_cell = best_match
-            cell_diff["status"] = "unchanged" if best_score < 0.01 else "modified"
-            cell_diff["original_source"] = start_cell.get('source', '')
-            cell_diff["original_index"] = j
-            
-        diff_result.append(cell_diff)
-    
-    return diff_result
+    # Add some custom CSS to make it work better in Streamlit
+    html = f"""
+    <style>
+    .jp-Notebook {{ max-width: 100%; margin: 0; }}
+    .jp-Cell {{ margin: 10px 0; }}
+    .jp-OutputArea-output {{ overflow-x: auto; }}
+    .jp-Diff-addedChunk {{ background-color: #e6ffe6; }}
+    .jp-Diff-removedChunk {{ background-color: #ffe6e6; }}
+    </style>
+    {html}
+    """
+    return html
 
 @st.cache_data
 def get_assignments():
@@ -149,40 +158,15 @@ def navigate_student(direction):
     
     st.session_state["selected_student"] = new_student
 
-def display_diff(diff_data, show_outputs=False):
-    """Display the diff in a readable format."""
-    if "error" in diff_data:
-        st.error(diff_data["error"])
+def display_diff(diff_html, show_outputs=False):
+    """Display the diff using Streamlit's HTML component."""
+    if isinstance(diff_html, dict) and "error" in diff_html:
+        st.error(diff_html["error"])
         return
     
-    for cell in diff_data:
-        with st.expander(
-            f"Cell {cell['index']} ({cell['cell_type']}) - {cell['status'].upper()}",
-            expanded=cell['status'] != 'unchanged'
-        ):
-            if cell['status'] == 'added':
-                st.code(cell['source'], language='python' if cell['cell_type'] == 'code' else None)
-            elif cell['status'] == 'modified':
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.write("Original:")
-                    st.code(cell['original_source'], language='python' if cell['cell_type'] == 'code' else None)
-                with col2:
-                    st.write("Modified:")
-                    st.code(cell['source'], language='python' if cell['cell_type'] == 'code' else None)
-            else:  # unchanged
-                st.code(cell['source'], language='python' if cell['cell_type'] == 'code' else None)
-            
-            if show_outputs and cell['outputs'] and cell['cell_type'] == 'code':
-                st.write("Outputs:")
-                for output in cell['outputs']:
-                    if 'text' in output:
-                        st.text(output['text'])
-                    elif 'data' in output:
-                        if 'image/png' in output['data']:
-                            st.image(output['data']['image/png'])
-                        elif 'text/plain' in output['data']:
-                            st.text(output['data']['text/plain'])
+    height = 500
+    
+    components.html(diff_html, height=height, scrolling=True)
 
 def main():
     st.title("Notebook Diff Viewer")
