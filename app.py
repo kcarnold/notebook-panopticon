@@ -212,7 +212,7 @@ def compute_notebook_diff(submission_notebook, starter_notebook):
 @st.cache_data
 def get_assignments():
     """Get list of assignments from submissions directory."""
-    return [d.name for d in SUBMISSIONS_DIR.iterdir() if d.is_dir()]
+    return sorted([d.name for d in SUBMISSIONS_DIR.iterdir() if d.is_dir()])
 
 
 @st.cache_data
