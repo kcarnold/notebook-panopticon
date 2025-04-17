@@ -6,7 +6,7 @@ import click
 
 def extract_student_name(path):
     """Extract student name from submission path."""
-    # Example: "Sucry Bendeck_3962962_assignsubmission_file/notebook.ipynb"
+    # Example: "Fname Lname_1234_assignsubmission_file/notebook.ipynb"
     parts = Path(path).parts[0].split('_')
     return parts[0]
 
