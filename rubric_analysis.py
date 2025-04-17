@@ -27,11 +27,15 @@ def genai_client():
     )
 
 
-class RubricResponse(BaseModel):
+class RubricItemResponse(BaseModel):
     """A response to a rubric check."""
     item: str
     status: Literal["pass", "not yet", "not applicable"]
     comment: str
+
+class RubricResponse(BaseModel):
+    item_responses: list[RubricItemResponse]
+    other_comments: str
 
 
 def do_rubric_check(rubric, document, document_title):
@@ -44,7 +48,12 @@ def do_rubric_check(rubric, document, document_title):
 {rubric}
 </document>
 
-Check the notebook against the rubric."""
+Check the notebook against the rubric.
+
+Only include a comment if the item is not clearly pass, otherwise leave it blank.
+
+Use the other_comments field to point out any other possible issues or things that would benefit from manual review.
+"""
 
     client = genai_client()
     response = client.models.generate_content(
@@ -52,7 +61,7 @@ Check the notebook against the rubric."""
         contents=prompt,
         config=genai_types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=list[RubricResponse]
+            response_schema=RubricResponse
         )
     )
 
@@ -60,10 +69,7 @@ Check the notebook against the rubric."""
     try:
         if response.text is None:
             raise ValueError("Response is None")
-        list_of_rubric_responses = json.loads(response.text)
-        if not isinstance(list_of_rubric_responses, list):
-            raise ValueError("Response is not a list")
-        rubric_responses = [RubricResponse.model_validate(item) for item in list_of_rubric_responses]
+        rubric_check = RubricResponse.model_validate_json(response.text)
     except json.JSONDecodeError as e:
         st.error(f"Error parsing rubric response: {e}")
     except Exception as e:
@@ -78,10 +84,13 @@ Check the notebook against the rubric."""
         "not applicable": "⏳"
     }
     md = ''
-    for rubric_item in rubric_responses:
+    for rubric_item in rubric_check.item_responses:
         emoji = status_to_emoji.get(rubric_item.status, "❓")
         md += f"- {emoji} **{rubric_item.item}**\n"
         if rubric_item.comment:
             md += f"  - {rubric_item.comment}\n"
+
+    if rubric_check.other_comments:
+        md += f"\n### Other Comments\n{rubric_check.other_comments}\n"
     st.markdown(md)
         
