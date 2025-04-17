@@ -4,6 +4,8 @@ import streamlit.components.v1 as components
 import nbformat
 from pathlib import Path
 import random
+import difflib
+from rubric_analysis import do_rubric_check
 
 st.set_page_config(
     layout="wide",
@@ -328,9 +330,6 @@ def main():
         with cols[3]:
             st.button("🔀 Random", on_click=lambda: navigate_student("random"), key="random_student")
     
-    # Display options
-    unified_view = st.checkbox("Unified Diff View", value=False)
-    
     # Get and display diff
     try:
         submission, starter = get_submission_and_starter(selected_student, selected_assignment)
@@ -339,6 +338,23 @@ def main():
         return
     submission_quarto = notebook_to_quarto(submission)
     starter_quarto = notebook_to_quarto(starter)
+
+    rubric = st.text_area("Rubric", height=200)
+    if st.button("Check against rubric"):
+        unified_diff_text = ''.join(
+            difflib.unified_diff(
+                starter_quarto.splitlines(keepends=True),
+                submission_quarto.splitlines(keepends=True),
+                fromfile="starter.ipynb",
+                tofile="your_notebook.ipynb",
+                n=3,
+            )
+        )
+        do_rubric_check(rubric, unified_diff_text, document_title="Notebook Diff")
+        
+
+    # Display options
+    unified_view = st.checkbox("Unified Diff View", value=False)    
     if unified_view:
         diff_html = generate_unified_diff_html(starter_quarto, submission_quarto)
     else:

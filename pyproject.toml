@@ -7,7 +7,9 @@ requires-python = ">=3.13"
 dependencies = [
     "ansi2html>=1.9.2",
     "click>=8.1.8",
+    "google-genai>=1.11.0",
     "nbdime>=4.0.2",
     "nbformat>=5.10.4",
+    "pydantic>=2.11.3",
     "streamlit>=1.42.2",
 ]
