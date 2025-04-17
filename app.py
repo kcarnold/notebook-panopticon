@@ -1,12 +1,16 @@
 from difflib import SequenceMatcher
-import io
 import streamlit as st
 import streamlit.components.v1 as components
 import nbformat
 from pathlib import Path
 import random
 
-st.set_page_config(layout="wide")
+st.set_page_config(
+    layout="wide",
+    page_title="Notebook Diff Viewer",
+    page_icon=":notebook:"
+)
+
 
 
 DATA_DIR = Path("data")
@@ -46,17 +50,16 @@ def compute_diff_score(submission, starter):
     similarity = SequenceMatcher(None, submission_code, starter_code).ratio()
     return 1 - similarity
 
-#@st.cache_data
+
 def get_submission_and_starter(student, assignment):
     """Get or compute diff for student's assignment."""
     submission_path = SUBMISSIONS_DIR / assignment / f"{student}.ipynb"
     starter_paths = list(STARTERS_DIR.glob(f"{assignment}*.ipynb"))
     
     if not submission_path.exists():
-        return {"error": "Submission not found"}
-
+        raise FileNotFoundError(f"Submission not found: {submission_path}")
     if not starter_paths:
-        return {"error": "No starter notebook found"}
+        raise FileNotFoundError(f"Starter notebook not found for assignment: {assignment}")
     
     best_starter, score = find_matching_starter(submission_path, starter_paths)
     
@@ -226,7 +229,7 @@ def generate_unified_diff_html(a, b):
         .equal { background-color: white; font-size: 6px; }
         .delete { background-color: #ffe6e6; }
         .insert { background-color: #e6ffe6; }
-        .diff-container { font-size: 10px; font-family: monospace; white-space: pre-line; overflow-x: auto; }
+        .diff-container { font-size: 10px; font-family: monospace; white-space: pre-wrap; overflow-x: auto; }
     """
     return f"""
     <style>{custom_css}</style>
@@ -296,8 +299,6 @@ def navigate_student(direction):
 
 
 def main():
-    st.title("Notebook Diff Viewer")
-    
     # Load data
     st.session_state["available_assignments"] = assignments = get_assignments()
     st.session_state['available_students'] = students = get_students()
@@ -306,33 +307,36 @@ def main():
     col1, col2 = st.columns(2)
     
     with col1:
-        st.write("Assignment")
-        selected_assignment = st.selectbox("Select Assignment", assignments, key="selected_assignment")
-        cols = st.columns(3)
+        cols = st.columns([1, 1, 1, 4])
         with cols[0]:
             st.button("⬅️ Prev", on_click=lambda: navigate_assignment("prev"), key="prev_assignment")
         with cols[1]:
             st.button("Next ➡️", on_click=lambda: navigate_assignment("next"), key="next_assignment")
         with cols[2]:
             st.button("🔀 Random", on_click=lambda: navigate_assignment("random"), key="random_assignment")
+        with cols[3]:
+            selected_assignment = st.selectbox("Select Assignment", assignments, key="selected_assignment")
     
     with col2:
-        st.write("Student")
-        selected_student = st.selectbox("Select Student", students, key="selected_student")
-        cols = st.columns(3)
+        cols = st.columns([4, 1, 1, 1])
         with cols[0]:
-            st.button("⬅️ Prev", on_click=lambda: navigate_student("prev"), key="prev_student")
+            selected_student = st.selectbox("Select Student", students, key="selected_student")
         with cols[1]:
-            st.button("Next ➡️", on_click=lambda: navigate_student("next"), key="next_student")
+            st.button("⬅️ Prev", on_click=lambda: navigate_student("prev"), key="prev_student")
         with cols[2]:
+            st.button("Next ➡️", on_click=lambda: navigate_student("next"), key="next_student")
+        with cols[3]:
             st.button("🔀 Random", on_click=lambda: navigate_student("random"), key="random_student")
     
     # Display options
-    show_outputs = st.checkbox("Show Cell Outputs", value=False)
     unified_view = st.checkbox("Unified Diff View", value=False)
     
     # Get and display diff
-    submission, starter = get_submission_and_starter(selected_student, selected_assignment)
+    try:
+        submission, starter = get_submission_and_starter(selected_student, selected_assignment)
+    except FileNotFoundError as e:
+        st.error(f"Error: {e}")
+        return
     submission_quarto = notebook_to_quarto(submission)
     starter_quarto = notebook_to_quarto(starter)
     if unified_view:
