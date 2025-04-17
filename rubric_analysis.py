@@ -58,6 +58,8 @@ Check the notebook against the rubric."""
 
     # try to parse
     try:
+        if response.text is None:
+            raise ValueError("Response is None")
         list_of_rubric_responses = json.loads(response.text)
         if not isinstance(list_of_rubric_responses, list):
             raise ValueError("Response is not a list")
