@@ -39,9 +39,15 @@ def find_assignment_name(filenames):
     return result
 
 @click.command()
-@click.argument('zipfile_path', type=click.Path(exists=True))
-def process_submissions(zipfile_path):
+@click.argument('zipfile_paths', type=click.Path(exists=True), nargs=-1)
+def process_submissions(zipfile_paths):
     """Process a ZIP file of student submissions."""
+    for zipfile_path in zipfile_paths:
+        process_submission_zip(zipfile_path)
+
+def process_submission_zip(zipfile_path):
+    """Process a single ZIP file of student submissions."""
+    print(f"Processing {zipfile_path}")
     with zipfile.ZipFile(zipfile_path) as zf:
         # Get all .ipynb files
         notebooks = [f for f in zf.namelist() if f.endswith('.ipynb')]
