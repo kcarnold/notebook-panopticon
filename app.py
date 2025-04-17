@@ -5,9 +5,6 @@ import streamlit.components.v1 as components
 import nbformat
 from pathlib import Path
 import random
-from nbdime import diff_notebooks
-import nbdime.prettyprint as nbdiff_print
-#from nbdime.webapp.nbdimeserver import diff_to_html
 
 st.set_page_config(layout="wide")
 
@@ -50,7 +47,7 @@ def compute_diff_score(submission, starter):
     return 1 - similarity
 
 #@st.cache_data
-def get_cached_diff(student, assignment):
+def get_submission_and_starter(student, assignment):
     """Get or compute diff for student's assignment."""
     submission_path = SUBMISSIONS_DIR / assignment / f"{student}.ipynb"
     starter_paths = list(STARTERS_DIR.glob(f"{assignment}*.ipynb"))
@@ -66,7 +63,7 @@ def get_cached_diff(student, assignment):
     submission = nbformat.read(submission_path, as_version=4)
     starter = nbformat.read(best_starter, as_version=4)
     
-    return compute_notebook_diff(submission, starter)
+    return submission, starter
 
 def notebook_to_quarto(nb):
     """Convert notebook to Quarto markdown format."""
@@ -137,8 +134,6 @@ def generate_diff_html(a, b):
         elif tag == 'delete':
             left_chunk = format_chunk(a_lines, i1, i2)
             blank_lines = [''] * len(left_chunk.split('\n'))
-            print(repr(left_chunk))
-            print(len(blank_lines))
             rows.append((
                 format_lines(left_chunk, 'diff-delete'),
                 format_lines('\n'.join(blank_lines))
@@ -202,12 +197,46 @@ def generate_diff_html(a, b):
     </div>
     """
 
-#@st.cache_data
-def compute_notebook_diff(submission_notebook, starter_notebook):
-    """Compute notebook diff using Quarto format and return HTML representation."""
-    starter_quarto = notebook_to_quarto(starter_notebook)
-    submission_quarto = notebook_to_quarto(submission_notebook)
-    return generate_diff_html(starter_quarto, submission_quarto)
+def generate_unified_diff_html(a, b):
+    """Generate HTML for a unified diff between two texts with collapsible common sections."""
+    #diff = unified_diff(a.splitlines(), b.splitlines(), lineterm='', n=9999)
+    a_lines = a.splitlines()
+    b_lines = b.splitlines()
+    ops = SequenceMatcher(None, a_lines, b_lines).get_opcodes()
+
+    def format_chunk(lines, start, end):
+        if not lines[start:end]:
+            return ""
+        chunk = "\n".join(lines[start:end])
+        # Escape HTML characters
+        chunk = chunk.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return chunk
+
+    html_out = ''
+    for tag, i1, i2, j1, j2 in ops:
+        if tag == 'equal':
+            html_out += f'<div class="equal">{format_chunk(a_lines, i1, i2)}</div>'
+            continue
+        if tag in {'replace', 'delete'}:
+            html_out += f'<div class="delete">{format_chunk(a_lines, i1, i2)}</div>'
+        if tag in {'replace', 'insert'}:
+            html_out += f'<div class="insert">{format_chunk(b_lines, j1, j2)}</div>'
+
+    custom_css = """
+        .equal { background-color: white; font-size: 6px; }
+        .delete { background-color: #ffe6e6; }
+        .insert { background-color: #e6ffe6; }
+        .diff-container { font-size: 10px; font-family: monospace; white-space: pre-line; overflow-x: auto; }
+    """
+    return f"""
+    <style>{custom_css}</style>
+    <div class="diff-container">
+    <div class="diff-pane">
+{html_out}
+</div>
+    </div>
+    """
+
 
 @st.cache_data
 def get_assignments():
@@ -265,15 +294,6 @@ def navigate_student(direction):
     
     st.session_state["selected_student"] = new_student
 
-def display_diff(diff_html, show_outputs=False):
-    """Display the diff using Streamlit's HTML component."""
-    if isinstance(diff_html, dict) and "error" in diff_html:
-        st.error(diff_html["error"])
-        return
-    
-    height = 500
-    
-    components.html(diff_html, height=height, scrolling=True)
 
 def main():
     st.title("Notebook Diff Viewer")
@@ -309,10 +329,19 @@ def main():
     
     # Display options
     show_outputs = st.checkbox("Show Cell Outputs", value=False)
+    unified_view = st.checkbox("Unified Diff View", value=False)
     
     # Get and display diff
-    diff_data = get_cached_diff(selected_student, selected_assignment)
-    display_diff(diff_data, show_outputs=show_outputs)
+    submission, starter = get_submission_and_starter(selected_student, selected_assignment)
+    submission_quarto = notebook_to_quarto(submission)
+    starter_quarto = notebook_to_quarto(starter)
+    if unified_view:
+        diff_html = generate_unified_diff_html(starter_quarto, submission_quarto)
+    else:
+        diff_html = generate_diff_html(starter_quarto, submission_quarto)
+
+    height = 800
+    components.html(diff_html, height=height, scrolling=True)
 
 
 main()
