@@ -1,9 +1,11 @@
-from pathlib import Path
-import subprocess
-import nbformat
-from typing import Dict, List
 import difflib
+import subprocess
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List
+
+import nbformat
+from thefuzz import fuzz
 
 DEFAULT_REPO_URL = "https://github.com/Calvin-Data-Science/cs375-376-public"
 
@@ -103,17 +105,11 @@ def find_closest_starter(
     versions: Dict[str, Dict[str, str]]
 ) -> StarterMatch:
     """Find the starter notebook version most similar to the given Quarto text."""
-    best: StarterMatch | None = None  # type: ignore
+    best: StarterMatch | None = None
     best_ratio = -1.0
-    print("Find closest starter notebook")
     for name, rev_map in versions.items():
         for rev, starter_quarto in rev_map.items():
-            print(f"Comparing {name} at {rev}")
-            matcher = difflib.SequenceMatcher(None, notebook_quarto, starter_quarto)
-            # Abort early if the quick ratio is not better than the best found
-            if matcher.real_quick_ratio() <= best_ratio:
-                continue
-            ratio = matcher.ratio()
+            ratio = fuzz.ratio(notebook_quarto, starter_quarto)
             if ratio <= best_ratio:
                 continue
             best_ratio = ratio

@@ -195,14 +195,10 @@ def main():
     
     # Get and display diff
     try:
-        print("Getting all starter versions...")
         versions = all_starter_versions()
-        print("Getting submission and starter...")
         submission_quarto, match = get_submission_and_starter(selected_student, selected_assignment, versions=versions)
         starter_quarto = versions[match.starter][match.revision]
-        print("Computing diff...")
         unified_diff_text = unified_diff(submission_quarto, starter_quarto, n_context_lines=9999)
-        print("Done")
     except FileNotFoundError as e:
         st.error(f"Error: {e}")
         return
