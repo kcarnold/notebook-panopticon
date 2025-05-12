@@ -43,6 +43,9 @@ def find_assignment_name(filenames):
 def process_submissions(zipfile_paths):
     """Process a ZIP file of student submissions."""
     for zipfile_path in zipfile_paths:
+        if not zipfile_path.lower().endswith('.zip'):
+            print(f"Skipping {zipfile_path} - not a ZIP file")
+            continue
         process_submission_zip(zipfile_path)
 
 def process_submission_zip(zipfile_path):
