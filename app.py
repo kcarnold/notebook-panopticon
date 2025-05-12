@@ -69,12 +69,11 @@ def notebook_to_quarto(nb):
     return '\n\n'.join(chunks)
 
 
-def generate_unified_diff_html(a, b):
+def generate_unified_diff_html(a, b, context=5):
     """Generate HTML for a unified diff between two texts with collapsible common sections."""
-    #diff = unified_diff(a.splitlines(), b.splitlines(), lineterm='', n=9999)
     a_lines = a.splitlines()
     b_lines = b.splitlines()
-    ops = SequenceMatcher(None, a_lines, b_lines).get_opcodes()
+    ops = SequenceMatcher(None, a_lines, b_lines).get_grouped_opcodes(n=context)
 
     def format_chunk(lines, start, end):
         if not lines[start:end]:
@@ -85,27 +84,29 @@ def generate_unified_diff_html(a, b):
         return chunk
 
     html_out = ''
-    for tag, i1, i2, j1, j2 in ops:
-        if tag == 'equal':
-            html_out += f'<div class="equal">{format_chunk(a_lines, i1, i2)}</div>'
-            continue
-        if tag in {'replace', 'delete'}:
-            html_out += f'<div class="delete">{format_chunk(a_lines, i1, i2)}</div>'
-        if tag in {'replace', 'insert'}:
-            html_out += f'<div class="insert">{format_chunk(b_lines, j1, j2)}</div>'
+    for group in ops:
+        html_out += '<div class="diff-group">'
+        for tag, i1, i2, j1, j2 in group:
+            if tag == 'equal':
+                html_out += f'<div class="equal">{format_chunk(a_lines, i1, i2)}</div>'
+                continue
+            if tag in {'replace', 'delete'}:
+                html_out += f'<div class="delete">{format_chunk(a_lines, i1, i2)}</div>'
+            if tag in {'replace', 'insert'}:
+                html_out += f'<div class="insert">{format_chunk(b_lines, j1, j2)}</div>'
+        html_out += '</div>'
 
     custom_css = """
-        .equal { background-color: white; font-size: 6px; }
+        .equal { background-color: white; font-size: 8px; }
         .delete { background-color: #ffe6e6; }
         .insert { background-color: #e6ffe6; }
-        .diff-container { font-size: 10px; font-family: monospace; white-space: pre-wrap; overflow-x: auto; }
+        .diff-container { display: flex; flex-flow: row wrap; }
+        .diff-group { border: 1px solid #ccc; margin: 5px 0; padding: 5px; font-size: 10px; font-family: monospace; white-space: pre-wrap; overflow-x: auto; width: 49%;}
     """
     return f"""
     <style>{custom_css}</style>
     <div class="diff-container">
-    <div class="diff-pane">
 {html_out}
-</div>
     </div>
     """
 
@@ -203,9 +204,10 @@ def main():
         st.error(f"Error: {e}")
         return
 
-    rubric = st.text_area("Rubric", height=200)
-    if st.button("Check against rubric"):
-        do_rubric_check(rubric=rubric, document=unified_diff_text, document_title="Notebook Diff")
+    with st.expander("Rubric Check", expanded=False):
+        rubric = st.text_area("Rubric", height=200)
+        if st.button("Check against rubric"):
+            do_rubric_check(rubric=rubric, document=unified_diff_text, document_title="Notebook Diff")
         
 
     # Display options
