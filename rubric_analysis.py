@@ -8,7 +8,8 @@ from google.genai import types as genai_types
 from pydantic import BaseModel
 
 
-GENAI_MODEL = 'gemini-2.0-flash'
+#GENAI_MODEL = 'gemini-2.0-flash'
+GENAI_MODEL = 'gemini-2.5-flash-preview-04-17'
 
 
 @dataclass
@@ -35,6 +36,7 @@ class RubricItemResponse(BaseModel):
 
 class RubricResponse(BaseModel):
     item_responses: list[RubricItemResponse]
+    possible_issues: list[str]
     other_comments: str
 
 
@@ -48,7 +50,7 @@ def do_rubric_check(rubric, document, document_title):
 {rubric}
 </document>
 
-Check the notebook against the rubric.
+Check the notebook against the rubric. Also identify any other possible issues or misconceptions.
 
 Only include a comment if the item is not clearly pass, otherwise leave it blank.
 
@@ -61,7 +63,10 @@ Use the other_comments field to point out any other possible issues or things th
         contents=prompt,
         config=genai_types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=RubricResponse
+            response_schema=RubricResponse,
+            thinking_config=genai_types.ThinkingConfig(
+                thinking_budget=1000
+            )
         )
     )
 
@@ -90,6 +95,10 @@ Use the other_comments field to point out any other possible issues or things th
         if rubric_item.comment:
             md += f"  - {rubric_item.comment}\n"
 
+    if rubric_check.possible_issues:
+        md += "\n### Possible Issues\n"
+        for issue in rubric_check.possible_issues:
+            md += f"- {issue}\n"
     if rubric_check.other_comments:
         md += f"\n### Other Comments\n{rubric_check.other_comments}\n"
     st.markdown(md)
